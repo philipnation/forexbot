@@ -1,11 +1,13 @@
+from flask import Flask
 import pandas as pd
 import numpy as np
 import ccxt
-import time
 import requests
 from ta.trend import EMAIndicator, MACD
 from ta.momentum import RSIIndicator
 from ta.volatility import AverageTrueRange
+
+app = Flask(__name__)
 
 BOT_TOKEN = '8139825360:AAHFPDGy4Yk3t-f88CCpqDrw_WlmD1F1K6g'
 CHAT_ID = '1735704344'
@@ -58,8 +60,6 @@ def analyze_forex_pairs(exchange, forex_pairs, timeframe="1h", limit=300):
                 latest['macd'] < latest['macd_signal']
             )
 
-            print(latest)
-
             if buy_signal:
                 side = "BUY"
                 tp = current_price + 2 * atr_value
@@ -85,29 +85,25 @@ def analyze_forex_pairs(exchange, forex_pairs, timeframe="1h", limit=300):
 
     return signals
 
-# Initialize exchange
-exchange = ccxt.binance({'enableRateLimit': True})
-forex_pairs = ['EUR/USDT', 'GBP/USDT', 'AUD/USDT', 'TRX/USDT', 'DOGE/USDT']
+@app.route('/')
+def run_signal_check():
+    exchange = ccxt.binance({'enableRateLimit': True})
+    forex_pairs = ['EUR/USDT', 'GBP/USDT', 'AUD/USDT', 'TRX/USDT', 'DOGE/USDT']
 
-#print(exchange.load_markets().keys())
-
-
-# Run every 30 minutes
-while True:
-    print("\n🔁 Checking for trade signals...")
     results = analyze_forex_pairs(exchange, forex_pairs)
+    html_output = "<h2>📊 Trade Signals</h2>"
 
     for pair, info in results.items():
-        print(f"\n{pair}")
+        html_output += f"<h4>{pair}</h4>"
         if "error" in info:
-            print("❌ Error:", info["error"])
-            #send_telegram_message*(info["error"])
+            html_output += f"<p style='color:red;'>❌ Error: {info['error']}</p>"
         else:
-            print(f"✅ Signal     : {info['side']}")
-            print(f"   Price      : {info['price']}")
-            print(f"   Take Profit: {info['take_profit']}")
-            print(f"   Stop Loss  : {info['stop_loss']}")
-
+            html_output += f"""
+                <p>✅ Signal: {info['side']}<br>
+                Price: {info['price']}<br>
+                Take Profit: {info['take_profit']}<br>
+                Stop Loss: {info['stop_loss']}</p>
+            """
             if info["side"] in ["BUY", "SELL"]:
                 msg = (
                     f"📊 *{pair}*\n"
@@ -117,8 +113,8 @@ while True:
                     f"SL: {info['stop_loss']}"
                 )
                 send_telegram_message(msg)
-            else:
-                send_telegram_message(f"No signals")
 
-    print("⏳ Sleeping for 30 minutes...")
-    time.sleep(30)
+    return html_output
+
+if __name__ == '__main__':
+    app.run(debug=True)
